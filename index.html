@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Mini-ITSM — IT Service Desk & Technical Support Portal. Plataforma corporativa de gerenciamento de incidentes, SLA, ativos CMDB e triagem técnica." />
+  <title>Mini-ITSM | IT Service Desk & Technical Support Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/styles.css" />
+  <script src="https://unpkg.com/lucide@latest" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+    <!-- Mobile Backdrop -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar" aria-label="Navegação Principal">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-logo" aria-hidden="true">
+            <i data-lucide="shield-check"></i>
+          </div>
+          <div class="brand-text">
+            <span class="brand-title">Mini-ITSM</span>
+            <span class="brand-subtitle">Service Desk & NOC</span>
+          </div>
+        </div>
+        <button class="icon-btn mobile-only" id="closeSidebarBtn" aria-label="Fechar menu">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+
+      <!-- Simulated Role / RBAC Switcher -->
+      <div class="role-card">
+        <label for="roleSelector" class="role-label">Perfil Operacional (RBAC)</label>
+        <div class="role-select-wrapper">
+          <i data-lucide="user-cog" class="role-icon"></i>
+          <select id="roleSelector" class="role-select" aria-label="Selecionar perfil de acesso">
+            <option value="manager">Gestor de TI (Admin)</option>
+            <option value="analyst_n2">Analista Infra / NOC (N2)</option>
+            <option value="support_n1">Suporte Técnico (N1)</option>
+          </select>
+        </div>
+        <span class="role-hint" id="roleHint">Acesso total: gestão de filas, ativos e auditoria</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-group-title">OPERAÇÕES ITSM</div>
+        <button class="nav-item active" data-view="dashboard">
+          <i data-lucide="layout-dashboard"></i>
+          <span>Dashboard & KPIs</span>
+        </button>
+        <button class="nav-item" data-view="tickets">
+          <i data-lucide="ticket"></i>
+          <span>Chamados & Incidentes</span>
+          <span class="nav-badge" id="navOpenTicketsCount">0</span>
+        </button>
+        <button class="nav-item" data-view="assets">
+          <i data-lucide="server"></i>
+          <span>Ativos & CMDB</span>
+          <span class="nav-badge badge-warning" id="navAlertAssetsCount">0</span>
+        </button>
+
+        <div class="nav-group-title">ENGENHARIA & SUPORTE</div>
+        <button class="nav-item" data-view="tools">
+          <i data-lucide="terminal"></i>
+          <span>Triagem & NetOps Lab</span>
+        </button>
+        <button class="nav-item" data-view="kb">
+          <i data-lucide="book-open"></i>
+          <span>Base de Conhecimento</span>
+        </button>
+        <button class="nav-item" data-view="reports">
+          <i data-lucide="file-spreadsheet"></i>
+          <span>Relatórios & Dados</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="system-status">
+          <span class="status-dot online"></span>
+          <div class="status-info">
+            <strong>Core ITSM Engine</strong>
+            <span>LocalStorage Sync Ativo</span>
+          </div>
+        </div>
+        <div class="developer-credit">
+          <span>Desenvolvido por <strong>Glauco Guedes</strong></span>
+          <span class="version-tag">v2.4.0 • ITIL v4 Ready</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <div class="main-wrapper">
+      <!-- Top Header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-btn mobile-only" id="openSidebarBtn" aria-label="Abrir menu">
+            <i data-lucide="menu"></i>
+          </button>
+          <div class="global-search" role="search">
+            <i data-lucide="search" class="search-icon"></i>
+            <input
+              type="search"
+              id="globalSearchInput"
+              placeholder="Buscar chamados (INC-...), IPs, ativos, técnicos ou runbooks..."
+              autocomplete="off"
+            />
+            <kbd class="search-kbd">/</kbd>
+            <div class="search-dropdown hidden" id="globalSearchDropdown"></div>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <div class="sla-pill" id="topbarSlaPill" title="Conformidade geral de SLA">
+            <i data-lucide="clock"></i>
+            <span>SLA: <strong id="topbarSlaValue">94.2%</strong></span>
+          </div>
+
+          <div class="notification-wrapper">
+            <button class="icon-btn" id="notificationsBtn" aria-label="Alertas de SLA e Infraestrutura">
+              <i data-lucide="bell"></i>
+              <span class="notification-dot" id="notificationDot"></span>
+            </button>
+            <div class="popover hidden" id="notificationsPopover">
+              <div class="popover-header">
+                <strong>Central de Alertas Operacionais</strong>
+                <span class="badge badge-danger" id="alertsCounterBadge">0</span>
+              </div>
+              <div class="popover-body" id="notificationsList"></div>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" id="newTicketGlobalBtn">
+            <i data-lucide="plus"></i>
+            <span>Novo Chamado</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Dynamic Content Container -->
+      <main class="content-area" id="contentArea">
+        <!-- VIEW 1: DASHBOARD -->
+        <section class="view-section active" id="view-dashboard">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Visão Geral das Operações de TI</h1>
+              <p class="page-subtitle">Monitoramento em tempo real de incidentes, SLA, disponibilidade de ativos e métricas ITIL.</p>
+            </div>
+            <div class="page-actions">
+              <button class="btn btn-outline" id="exportQuickCsvBtn">
+                <i data-lucide="download"></i>
+                <span>Exportar CSV</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- KPI Grid -->
+          <div class="kpi-grid" id="dashboardKpiGrid"></div>
+
+          <!-- Charts Grid -->
+          <div class="charts-grid">
+            <div class="card chart-card">
+              <div class="card-header">
+                <div>
+                  <h2 class="card-title">Tendência de Incidentes (Últimos 7 Dias)</h2>
+                  <p class="card-subtitle">Comparativo entre chamados abertos e resolvidos</p>
+                </div>
+                <span class="badge badge-info">Tempo Real</span>
+              </div>
+              <div class="chart-container">
+                <canvas id="trendChart"></canvas>
+              </div>
+            </div>
+
+            <div class="card chart-card">
+              <div class="card-header">
+                <div>
+                  <h2 class="card-title">Distribuição por Categoria</h2>
+                  <p class="card-subtitle">Volume operacional por domínio técnico</p>
+                </div>
+              </div>
+              <div class="chart-container">
+                <canvas id="categoryChart"></canvas>
+              </div>
+            </div>
+
+            <div class="card chart-card">
+              <div class="card-header">
+                <div>
+                  <h2 class="card-title">Carga por Fila de Atendimento</h2>
+                  <p class="card-subtitle">Distribuição entre N1, NOC/Redes, Infra e Field</p>
+                </div>
+              </div>
+              <div class="chart-container">
+                <canvas id="queueChart"></canvas>
+              </div>
+            </div>
+
+            <div class="card chart-card">
+              <div class="card-header">
+                <div>
+                  <h2 class="card-title">Saúde dos Ativos (CMDB)</h2>
+                  <p class="card-subtitle">Disponibilidade da infraestrutura monitorada</p>
+                </div>
+              </div>
+              <div class="chart-container">
+                <canvas id="assetsHealthChart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Operational Grid -->
+          <div class="dashboard-bottom-grid">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2 class="card-title">Incidentes Críticos e Próximos ao Vencimento de SLA</h2>
+                  <p class="card-subtitle">Priorização imediata para prevenção de ruptura operacional</p>
+                </div>
+                <button class="btn btn-ghost btn-sm" data-goto="tickets">Ver todos &rarr;</button>
+              </div>
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Título / Ativo</th>
+                      <th>Prioridade</th>
+                      <th>Fila</th>
+                      <th>Status SLA</th>
+                      <th>Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody id="criticalTicketsBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2 class="card-title">Trilha de Auditoria & Atividades</h2>
+                  <p class="card-subtitle">Últimas ações executadas pela equipe técnica</p>
+                </div>
+              </div>
+              <div class="activity-timeline" id="dashboardActivityFeed"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 2: TICKETS & INCIDENTS -->
+        <section class="view-section" id="view-tickets">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Gestão de Chamados & Incidentes</h1>
+              <p class="page-subtitle">Controle de ciclo de vida ITIL, triagem técnica N1/N2, escalonamento e SLA.</p>
+            </div>
+            <div class="page-actions">
+              <div class="view-toggle" role="group" aria-label="Modo de visualização">
+                <button class="toggle-btn active" id="ticketListModeBtn" data-mode="list">
+                  <i data-lucide="list"></i>
+                  <span>Lista</span>
+                </button>
+                <button class="toggle-btn" id="ticketKanbanModeBtn" data-mode="kanban">
+                  <i data-lucide="kanban"></i>
+                  <span>Kanban</span>
+                </button>
+              </div>
+              <button class="btn btn-primary" id="newTicketSectionBtn">
+                <i data-lucide="plus"></i>
+                <span>Abrir Chamado</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Filters Toolbar -->
+          <div class="card filter-bar">
+            <div class="filter-group">
+              <label for="filterTicketSearch">Pesquisar</label>
+              <input type="text" id="filterTicketSearch" placeholder="ID, título, solicitante ou ativo..." />
+            </div>
+            <div class="filter-group">
+              <label for="filterTicketStatus">Status</label>
+              <select id="filterTicketStatus">
+                <option value="all">Todos os Status</option>
+                <option value="Aberto">Aberto</option>
+                <option value="Em Triagem">Em Triagem</option>
+                <option value="Em Atendimento">Em Atendimento</option>
+                <option value="Aguardando Terceiro">Aguardando Terceiro</option>
+                <option value="Resolvido">Resolvido</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filterTicketPriority">Prioridade</label>
+              <select id="filterTicketPriority">
+                <option value="all">Todas</option>
+                <option value="P1">P1 - Crítica (2h)</option>
+                <option value="P2">P2 - Alta (4h)</option>
+                <option value="P3">P3 - Média (12h)</option>
+                <option value="P4">P4 - Baixa (24h)</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filterTicketQueue">Fila Técnica</label>
+              <select id="filterTicketQueue">
+                <option value="all">Todas as Filas</option>
+                <option value="Service Desk N1">Service Desk N1</option>
+                <option value="Redes & NOC">Redes & NOC</option>
+                <option value="Infraestrutura & Cloud">Infraestrutura & Cloud</option>
+                <option value="Sistemas & AD">Sistemas & AD</option>
+                <option value="Field Service">Field Service</option>
+              </select>
+            </div>
+            <div class="filter-actions">
+              <button class="btn btn-outline btn-sm" id="clearTicketFiltersBtn">Limpar</button>
+            </div>
+          </div>
+
+          <!-- Tickets Table Mode -->
+          <div class="card" id="ticketsListContainer">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Chamado</th>
+                    <th>Assunto & Categoria</th>
+                    <th>Solicitante</th>
+                    <th>Prioridade</th>
+                    <th>Fila / Analista</th>
+                    <th>Status</th>
+                    <th>SLA</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="ticketsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tickets Kanban Mode -->
+          <div class="kanban-board hidden" id="ticketsKanbanContainer"></div>
+        </section>
+
+        <!-- VIEW 3: ASSETS & CMDB -->
+        <section class="view-section" id="view-assets">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Inventário de Ativos & CMDB</h1>
+              <p class="page-subtitle">Gestão de configuração de servidores, roteadores, OLTs, instâncias AWS e estações.</p>
+            </div>
+            <div class="page-actions">
+              <button class="btn btn-primary" id="newAssetBtn">
+                <i data-lucide="plus"></i>
+                <span>Cadastrar Ativo</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="kpi-grid kpi-grid-compact" id="assetsSummaryGrid"></div>
+
+          <div class="card filter-bar">
+            <div class="filter-group">
+              <label for="filterAssetSearch">Buscar Ativo</label>
+              <input type="text" id="filterAssetSearch" placeholder="Tag, hostname, IP ou local..." />
+            </div>
+            <div class="filter-group">
+              <label for="filterAssetType">Tipo de Equipamento</label>
+              <select id="filterAssetType">
+                <option value="all">Todos os Tipos</option>
+                <option value="Servidor">Servidor</option>
+                <option value="Roteador / Core">Roteador / Core</option>
+                <option value="OLT / Fibra">OLT / Fibra</option>
+                <option value="Switch Gerenciável">Switch Gerenciável</option>
+                <option value="Cloud AWS">Cloud AWS</option>
+                <option value="Estação de Trabalho">Estação de Trabalho</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="filterAssetStatus">Estado Operacional</label>
+              <select id="filterAssetStatus">
+                <option value="all">Todos</option>
+                <option value="Online">Online</option>
+                <option value="Alerta">Alerta / Degradado</option>
+                <option value="Offline">Offline / Crítico</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Asset Tag</th>
+                    <th>Hostname & Tipo</th>
+                    <th>Endereço IP / Endpoint</th>
+                    <th>Localização / Ambiente</th>
+                    <th>SO / Firmware</th>
+                    <th>Status</th>
+                    <th>Incidentes</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="assetsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 4: TRIAGE & NETOPS / SYSADMIN LAB -->
+        <section class="view-section" id="view-tools">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Central de Triagem & NetOps Lab</h1>
+              <p class="page-subtitle">Utilitários práticos para diagnóstico de redes, FTTH, análise de latência e automação SysAdmin.</p>
+            </div>
+          </div>
+
+          <div class="tools-grid">
+            <!-- Tool 1: Subnet / CIDR Calculator -->
+            <div class="card tool-card">
+              <div class="card-header">
+                <div>
+                  <h2 class="card-title"><i data-lucide="network" class="inline-icon"></i> Calculadora IPv4 / CIDR</h2>
+                  <p class="card-subtitle">Planejamento de sub-redes, máscara, broadcast e hosts utilizáveis</p>
+                </div>
+              </div>
+              <div class="tool-body">
+                <div class="form-row">
+                  <div class="form-group flex-2">
+                    <label for="cidrIpInput">Endereço IPv4</label>
+                    <input type="text" id="cidrIpInput" value="10.24.16.45" placeholder="Ex: 192.168.10.0" />
+                  </div>
+                  <div class="form-group flex-1">
+                    <label for="cidrPrefixInput">Prefixo (/CIDR)</label>
+                    <input type="number" id="cidrPrefixInput" value="26" min="1" max="32" />
+                  </div>
+                </div>
+                <button class="btn btn-primary btn-block" id="calcCidrBtn">Calcular Sub-rede</button>
+                <div class="tool-output" id="cidrOutput"></div>
+              </div>
+            </div>
+
+            <!-- Tool 2: FTTH Optical Power Budget -->
+            <div class="card tool-card">
+              <div class="card-header">
+                <div>
+                  <h2 class="card-title"><i data-lucide="activity" class="inline-icon"></i> Orçamento Óptico PON / FTTH</h2>
+                  <p class="card-subtitle">Simulação de atenuação de sinal (dBm) entre OLT e ONU do cliente</p>
+                </div>
+              </div>
+              <div class="tool-body">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="oltTxInput">Potência Tx OLT (dBm)</label>
+                    <input type="number" id="oltTxInput" value="3.5" step="0.5" />
+                  </div>
+                  <div class="form-group">
+                    <label for="fiberKmInput">Distância Fibra (km)</label>
+                    <input type="number" id="fiberKmInput" value="4.2" step="0.1" min="0" />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="splitter1Select">Splitter Nível 1</label>
+                    <select id="splitter1Select">
+                      <option value="3.5">1:2 (3.5 dB)</option>
+                      <option value="7.2">1:4 (7.2 dB)</option>
+                      <option value="10.5" selected>1:8 (10.5 dB)</option>
+                      <option value="13.8">1:16 (13.8 dB)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="splitter2Select">Splitter Nível 2 (CTO)</label>
+                    <select id="splitter2Select">
+                      <option value="0">Nenhum (0 dB)</option>
+                      <option value="10.5">1:8 (10.5 dB)</option>
+                      <option value="13.8" selected>1:16 (13.8 dB)</option>
+                      <option value="17.2">1:32 (17.2 dB)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="splicesInput">Fusões / Conectores</label>
+                    <input type="number" id="splicesInput" value="4" min="0" max="30" />
+                  </div>
+                </div>
+                <button class="btn btn-primary btn-block" id="calcOpticalBtn">Calcular Sinal Rx na ONU</button>
+                <div class="tool-output" id="opticalOutput"></div>
+              </div>
+            </div>
+
+            <!-- Tool 3: MTR / Traceroute Log Analyzer -->
+            <div class="card tool-card">
+              <div class="card-header">
+                <div>
+                  <h2 class="card-title"><i data-lucide="radar" class="inline-icon"></i> Analisador de Logs MTR / Traceroute</h2>
+                  <p class="card-subtitle">Identifica automaticamente saltos com perda de pacotes ou latência crítica</p>
+                </div>
+                <button class="btn btn-outline btn-sm" id="loadSampleMtrBtn">Carregar Exemplo</button>
+              </div>
+              <div class="tool-body">
+                <div class="form-group">
+                  <label for="mtrLogInput">Saída do comando (WinMTR / Linux mtr)</label>
+                  <textarea id="mtrLogInput" rows="5" placeholder="Cole aqui a saída do mtr ou clique em 'Carregar Exemplo'..."></textarea>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-primary" id="analyzeMtrBtn">Diagnosticar Rota</button>
+                  <button class="btn btn-outline" id="copyMtrReportBtn">Copiar Laudo N2</button>
+                </div>
+                <div class="tool-output" id="mtrOutput"></div>
+              </div>
+            </div>
+
+            <!-- Tool 4: SysAdmin Script Generator -->
+            <div class="card tool-card">
+              <div class="card-header">
+                <div>
+                  <h2 class="card-title"><i data-lucide="file-code-2" class="inline-icon"></i> Gerador de Scripts SysAdmin</h2>
+                  <p class="card-subtitle">Automação pronta para Windows Server (Active Directory) e Linux Hardening</p>
+                </div>
+              </div>
+              <div class="tool-body">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="scriptTypeSelect">Template de Automação</label>
+                    <select id="scriptTypeSelect">
+                      <option value="ad_user">PowerShell — Provisionamento Usuário Active Directory</option>
+                      <option value="linux_hardening">Bash — Hardening SSH & Firewall UFW (Ubuntu/Debian)</option>
+                      <option value="net_diag">PowerShell — Coleta Completa de Diagnóstico de Rede</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="scriptParamInput">Parâmetro (Login AD / Porta SSH / Host)</label>
+                    <input type="text" id="scriptParamInput" value="carlos.silva" />
+                  </div>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-primary" id="generateScriptBtn">Gerar Script</button>
+                  <button class="btn btn-outline" id="copyScriptBtn">Copiar Código</button>
+                </div>
+                <pre class="code-preview" id="scriptPreviewOutput"></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 5: KNOWLEDGE BASE -->
+        <section class="view-section" id="view-kb">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Base de Conhecimento & Runbooks ITIL</h1>
+              <p class="page-subtitle">Procedimentos Operacionais Padrão (POPs) para resolução rápida e padronizada de incidentes.</p>
+            </div>
+            <div class="page-actions">
+              <button class="btn btn-primary" id="newKbBtn">
+                <i data-lucide="plus"></i>
+                <span>Novo Runbook</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="card filter-bar">
+            <div class="filter-group flex-2">
+              <label for="kbSearchInput">Buscar Procedimento ou Sintoma</label>
+              <input type="text" id="kbSearchInput" placeholder="Ex: PPPoE, Active Directory, DNS, EC2, BGP, lentidão..." />
+            </div>
+            <div class="filter-group">
+              <label for="kbCategoryFilter">Categoria</label>
+              <select id="kbCategoryFilter">
+                <option value="all">Todas</option>
+                <option value="Redes & Fibra">Redes & Fibra</option>
+                <option value="Windows Server & AD">Windows Server & AD</option>
+                <option value="Linux & Cloud AWS">Linux & Cloud AWS</option>
+                <option value="Segurança & Acesso">Segurança & Acesso</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="kb-grid" id="kbArticlesGrid"></div>
+        </section>
+
+        <!-- VIEW 6: REPORTS & DATA MANAGEMENT -->
+        <section class="view-section" id="view-reports">
+          <div class="page-header">
+            <div>
+              <h1 class="page-title">Relatórios Gerenciais & Portabilidade de Dados</h1>
+              <p class="page-subtitle">Exportação para planilhas, backup completo em JSON e controle da base local.</p>
+            </div>
+          </div>
+
+          <div class="reports-grid">
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">Exportação de Relatórios (CSV / Excel)</h2>
+              </div>
+              <p class="card-text">Gere relatórios estruturados compatíveis com Microsoft Excel, LibreOffice e Power BI.</p>
+              <div class="stack-buttons">
+                <button class="btn btn-primary" id="exportTicketsCsvBtn">
+                  <i data-lucide="file-spreadsheet"></i>
+                  <span>Exportar Base de Chamados (.CSV)</span>
+                </button>
+                <button class="btn btn-outline" id="exportAssetsCsvBtn">
+                  <i data-lucide="server"></i>
+                  <span>Exportar Inventário CMDB (.CSV)</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">Backup & Restauração da Base (JSON)</h2>
+              </div>
+              <p class="card-text">Exporte todo o estado atual do Mini-ITSM ou restaure um snapshot salvo anteriormente.</p>
+              <div class="stack-buttons">
+                <button class="btn btn-outline" id="exportJsonBackupBtn">
+                  <i data-lucide="download"></i>
+                  <span>Baixar Backup Completo (.JSON)</span>
+                </button>
+                <label class="btn btn-outline file-upload-label">
+                  <i data-lucide="upload"></i>
+                  <span>Importar Backup (.JSON)</span>
+                  <input type="file" id="importJsonBackupInput" accept=".json" hidden />
+                </label>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <h2 class="card-title">Ambiente de Demonstração</h2>
+              </div>
+              <p class="card-text">Restaura os dados originais de fábrica (chamados, ativos, runbooks e métricas) para apresentações.</p>
+              <div class="stack-buttons">
+                <button class="btn btn-danger" id="resetDemoDataBtn">
+                  <i data-lucide="rotate-ccw"></i>
+                  <span>Restaurar Dados Originais de Demonstração</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card mt-24">
+            <div class="card-header">
+              <h2 class="card-title">Resumo Executivo por Categoria e Prioridade</h2>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Categoria Operacional</th>
+                    <th>Total Chamados</th>
+                    <th>Abertos / Em Curso</th>
+                    <th>Resolvidos</th>
+                    <th>Taxa de Resolução</th>
+                  </tr>
+                </thead>
+                <tbody id="summaryReportTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- MODAL: NEW TICKET -->
+  <div class="modal-overlay hidden" id="newTicketModal" role="dialog" aria-modal="true" aria-labelledby="newTicketModalTitle">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 id="newTicketModalTitle">Abrir Novo Chamado / Incidente</h2>
+        <button class="icon-btn" data-close-modal="newTicketModal" aria-label="Fechar">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="newTicketForm" class="modal-body">
+        <div class="form-group">
+          <label for="ticketTitleInput">Título Resumido do Incidente *</label>
+          <input type="text" id="ticketTitleInput" required placeholder="Ex: Perda de pacotes na OLT-02 / Falha de autenticação VPN" />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="ticketCategoryInput">Categoria *</label>
+            <select id="ticketCategoryInput" required>
+              <option value="Redes & Conectividade">Redes & Conectividade</option>
+              <option value="Infraestrutura & Servidores">Infraestrutura & Servidores</option>
+              <option value="Sistemas & Active Directory">Sistemas & Active Directory</option>
+              <option value="Hardware & Ativos">Hardware & Ativos</option>
+              <option value="Segurança da Informação">Segurança da Informação</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="ticketPriorityInput">Prioridade & SLA *</label>
+            <select id="ticketPriorityInput" required>
+              <option value="P1">P1 - Crítica (SLA 2h)</option>
+              <option value="P2">P2 - Alta (SLA 4h)</option>
+              <option value="P3" selected>P3 - Média (SLA 12h)</option>
+              <option value="P4">P4 - Baixa (SLA 24h)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="ticketQueueInput">Fila de Destino *</label>
+            <select id="ticketQueueInput" required>
+              <option value="Service Desk N1">Service Desk N1</option>
+              <option value="Redes & NOC">Redes & NOC</option>
+              <option value="Infraestrutura & Cloud">Infraestrutura & Cloud</option>
+              <option value="Sistemas & AD">Sistemas & AD</option>
+              <option value="Field Service">Field Service</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="ticketAssetInput">Ativo Relacionado (CMDB)</label>
+            <select id="ticketAssetInput">
+              <option value="">Nenhum ativo específico</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="ticketRequesterInput">Solicitante / Setor *</label>
+            <input type="text" id="ticketRequesterInput" required placeholder="Ex: Mariana Costa (Financeiro)" />
+          </div>
+          <div class="form-group">
+            <label for="ticketAssigneeInput">Analista Responsável</label>
+            <select id="ticketAssigneeInput">
+              <option value="Glauco Guedes">Glauco Guedes</option>
+              <option value="Rafael Andrade">Rafael Andrade</option>
+              <option value="Camila Nogueira">Camila Nogueira</option>
+              <option value="Lucas Ferreira">Lucas Ferreira</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="ticketDescriptionInput">Descrição Técnica e Sintomas Observados *</label>
+          <textarea id="ticketDescriptionInput" rows="4" required placeholder="Descreva o impacto, mensagens de erro, testes iniciais realizados e horário de início..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close-modal="newTicketModal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Registrar Chamado</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: TICKET DETAILS & TECHNICAL TRIAGE -->
+  <div class="modal-overlay hidden" id="ticketDetailModal" role="dialog" aria-modal="true" aria-labelledby="detailTicketTitle">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div>
+          <div class="detail-badges" id="detailTicketBadges"></div>
+          <h2 id="detailTicketTitle" class="mt-4">Detalhes do Chamado</h2>
+        </div>
+        <button class="icon-btn" data-close-modal="ticketDetailModal" aria-label="Fechar">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div class="modal-body" id="ticketDetailBody"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: NEW / EDIT ASSET -->
+  <div class="modal-overlay hidden" id="assetModal" role="dialog" aria-modal="true" aria-labelledby="assetModalTitle">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 id="assetModalTitle">Cadastrar Ativo no CMDB</h2>
+        <button class="icon-btn" data-close-modal="assetModal" aria-label="Fechar">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="assetForm" class="modal-body">
+        <input type="hidden" id="assetEditId" />
+        <div class="form-row">
+          <div class="form-group">
+            <label for="assetHostnameInput">Hostname / Identificador *</label>
+            <input type="text" id="assetHostnameInput" required placeholder="Ex: SRV-AD-01 ou OLT-CORE-PB01" />
+          </div>
+          <div class="form-group">
+            <label for="assetTypeInput">Tipo de Ativo *</label>
+            <select id="assetTypeInput" required>
+              <option value="Servidor">Servidor</option>
+              <option value="Roteador / Core">Roteador / Core</option>
+              <option value="OLT / Fibra">OLT / Fibra</option>
+              <option value="Switch Gerenciável">Switch Gerenciável</option>
+              <option value="Cloud AWS">Cloud AWS</option>
+              <option value="Estação de Trabalho">Estação de Trabalho</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="assetIpInput">Endereço IP / Endpoint *</label>
+            <input type="text" id="assetIpInput" required placeholder="Ex: 10.10.0.15" />
+          </div>
+          <div class="form-group">
+            <label for="assetStatusInput">Status Operacional *</label>
+            <select id="assetStatusInput" required>
+              <option value="Online">Online</option>
+              <option value="Alerta">Alerta</option>
+              <option value="Offline">Offline</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="assetLocationInput">Localização / Datacenter *</label>
+            <input type="text" id="assetLocationInput" required placeholder="Ex: Rack 02 - NOC Matriz" />
+          </div>
+          <div class="form-group">
+            <label for="assetOsInput">Sistema Operacional / Firmware *</label>
+            <input type="text" id="assetOsInput" required placeholder="Ex: Windows Server 2022 / RouterOS 7.14" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close-modal="assetModal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Ativo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: NEW KB ARTICLE -->
+  <div class="modal-overlay hidden" id="kbModal" role="dialog" aria-modal="true" aria-labelledby="kbModalTitle">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 id="kbModalTitle">Publicar Novo Runbook Técnico</h2>
+        <button class="icon-btn" data-close-modal="kbModal" aria-label="Fechar">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <form id="kbForm" class="modal-body">
+        <div class="form-group">
+          <label for="kbTitleInput">Título do Procedimento *</label>
+          <input type="text" id="kbTitleInput" required placeholder="Ex: Diagnóstico de Lentidão DNS e Flush de Cache" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="kbCategoryInput">Categoria *</label>
+            <select id="kbCategoryInput" required>
+              <option value="Redes & Fibra">Redes & Fibra</option>
+              <option value="Windows Server & AD">Windows Server & AD</option>
+              <option value="Linux & Cloud AWS">Linux & Cloud AWS</option>
+              <option value="Segurança & Acesso">Segurança & Acesso</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="kbTagsInput">Tags (separadas por vírgula)</label>
+            <input type="text" id="kbTagsInput" placeholder="dns, ping, mtr, rede" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="kbStepsInput">Passos de Triagem e Resolução *</label>
+          <textarea id="kbStepsInput" rows="4" required placeholder="1. Verificar conectividade ICMP...&#10;2. Validar resolução DNS..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="kbCommandInput">Comando de Referência (Opcional)</label>
+          <input type="text" id="kbCommandInput" placeholder="Ex: ipconfig /flushdns && nslookup google.com" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" data-close-modal="kbModal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Publicar na Base</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <script src="./js/data.js"></script>
+  <script src="./js/storage.js"></script>
+  <script src="./js/diagnostic.js"></script>
+  <script src="./js/charts.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>
